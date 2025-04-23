@@ -1,3 +1,4 @@
+// ✅ Changed file: now using TWO canvas layers
 import { useEffect, useRef, useState, useCallback } from "react";
 import { SWATCHES } from "@/constants";
 import { ColorSwatch, Group } from "@mantine/core";
@@ -10,24 +11,32 @@ interface GeneratedResult {
 }
 
 export default function Home() {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    // ✅ Separate canvas refs for background and drawing layers
+    const bgCanvasRef = useRef<HTMLCanvasElement>(null);
+    const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState("rgb(255, 255, 255)");
     const [reset, setReset] = useState(false);
     const [result, setResult] = useState<GeneratedResult>();
     const [dictofVars, setDictofVars] = useState({});
     const [isErasing, setIsErasing] = useState(false);
-    const [eraserSize, setEraserSize] = useState(20); // Dynamic Eraser Size
+    const [eraserSize, setEraserSize] = useState(20);
 
-    // Resize canvas dynamically
+    // ✅ Initialize and resize both canvases
     const resizeCanvas = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext("2d");
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            ctx!.fillStyle = "black";
-            ctx!.fillRect(0, 0, canvas.width, canvas.height);
+        const bgCanvas = bgCanvasRef.current;
+        const drawCanvas = drawCanvasRef.current;
+
+        if (bgCanvas && drawCanvas) {
+            bgCanvas.width = window.innerWidth;
+            bgCanvas.height = window.innerHeight;
+            drawCanvas.width = window.innerWidth;
+            drawCanvas.height = window.innerHeight;
+
+            const bgCtx = bgCanvas.getContext("2d");
+            bgCtx!.fillStyle = "black";
+            bgCtx!.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
         }
     }, []);
 
@@ -44,21 +53,20 @@ export default function Home() {
         }
     }, [reset]);
 
+    // ✅ Only clear the drawing canvas (not background)
     const resetCanvas = () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext("2d");
-            ctx!.clearRect(0, 0, canvas.width, canvas.height);
-            ctx!.fillStyle = "black";
-            ctx!.fillRect(0, 0, canvas.width, canvas.height);
+        const drawCanvas = drawCanvasRef.current;
+        if (drawCanvas) {
+            const ctx = drawCanvas.getContext("2d");
+            ctx!.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
         }
     };
 
     const sendData = async () => {
-        const canvas = canvasRef.current;
-        if (canvas) {
+        const drawCanvas = drawCanvasRef.current;
+        if (drawCanvas) {
             const response = await axios.post(`${import.meta.env.VITE_API_URL}/calculate`, {
-                image: canvas.toDataURL("image/png"),
+                image: drawCanvas.toDataURL("image/png"),
                 dict_of_vars: dictofVars,
             });
             console.log("Response: ", response.data);
@@ -66,7 +74,7 @@ export default function Home() {
     };
 
     const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-        const canvas = canvasRef.current;
+        const canvas = drawCanvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext("2d");
             ctx!.beginPath();
@@ -81,19 +89,12 @@ export default function Home() {
 
     const draw = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         if (!isDrawing) return;
-        const canvas = canvasRef.current;
+        const canvas = drawCanvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext("2d");
-            ctx!.globalCompositeOperation = "source-over";
-
-            if (isErasing) {
-                ctx!.strokeStyle = "black";
-                ctx!.lineWidth = eraserSize;
-            } else {
-                ctx!.strokeStyle = color;
-                ctx!.lineWidth = 3;
-            }
-
+            ctx!.lineWidth = isErasing ? eraserSize : 3;
+            ctx!.strokeStyle = isErasing ? "rgba(0,0,0,1)" : color;
+            ctx!.globalCompositeOperation = isErasing ? "destination-out" : "source-over";
             ctx!.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
             ctx!.stroke();
         }
@@ -103,21 +104,12 @@ export default function Home() {
         <div>
             {/* Toolbar */}
             <div className="flex flex-wrap gap-2 p-4 items-center justify-center">
-                <Button
-                    onClick={() => setReset(true)}
-                    className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2"
-                >
+                <Button onClick={() => setReset(true)} className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2">
                     Reset
                 </Button>
-
-                <Button
-                    onClick={() => setIsErasing(!isErasing)}
-                    className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2"
-                >
+                <Button onClick={() => setIsErasing(!isErasing)} className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2">
                     {isErasing ? "Use Pen" : "Use Eraser"}
                 </Button>
-
-                {/* Eraser Size Adjuster */}
                 {isErasing && (
                     <input
                         type="range"
@@ -128,7 +120,6 @@ export default function Home() {
                         className="z-20 cursor-pointer"
                     />
                 )}
-
                 <Group className="z-20 flex flex-wrap space-x-2 p-2 rounded-lg bg-slate-600/80">
                     {SWATCHES.map((swatchcolor: string) => (
                         <ColorSwatch
@@ -139,19 +130,16 @@ export default function Home() {
                         />
                     ))}
                 </Group>
-
-                <Button
-                    onClick={sendData}
-                    className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2"
-                >
+                <Button onClick={sendData} className="z-20 bg-slate-600 text-white hover:bg-gray-800 transition-colors duration-200 rounded-md px-4 py-2">
                     Calculate
                 </Button>
             </div>
 
-            {/* Canvas */}
+            {/* ✅ Canvas Layers - background stays untouched */}
+            <canvas ref={bgCanvasRef} className="absolute top-0 left-0 w-full h-full z-0" />
             <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full"
+                ref={drawCanvasRef}
+                className="absolute top-0 left-0 w-full h-full z-10"
                 onMouseDown={startDrawing}
                 onMouseUp={stopDrawing}
                 onMouseOut={stopDrawing}
