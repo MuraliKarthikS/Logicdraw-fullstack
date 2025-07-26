@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from constants import SERVER_URL, PORT, ENV
 from apps.calculator.route import router as calculator_router
+from auth import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +27,7 @@ async def health():
 
 
 app.include_router(calculator_router, prefix='/calculate', tags=['calculate'])
+app.include_router(auth_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=SERVER_URL, port=int(PORT), reload=(ENV == "dev"))

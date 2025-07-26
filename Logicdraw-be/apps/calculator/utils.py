@@ -49,13 +49,23 @@ def analyze_image(img: Image, dict_of_vars: dict):
     response = model.generate_content([prompt, img])
     print("Raw response from Gemini:\n", response.text)
 
+    def clean_response(text):
+        lines = text.strip().splitlines()
+        # Remove markdown code block markers if present
+        if lines and lines[0].startswith('```'):
+            lines = lines[1:]
+            if lines and lines[-1].startswith('```'):
+                lines = lines[:-1]
+        return '\n'.join(lines)
+
     answers = []
+    cleaned_text = clean_response(response.text)
     try:
-        answers = ast.literal_eval(response.text)
+        answers = ast.literal_eval(cleaned_text)
     except Exception as e:
         print("AST parsing failed:", e)
         try:
-            answers = json.loads(response.text)
+            answers = json.loads(cleaned_text)
         except Exception as e2:
             print("JSON parsing also failed:", e2)
             answers = []
